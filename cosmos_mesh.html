@@ -18,24 +18,22 @@
 </li>
 <li><p>Pair zones:  Implement an AMM for a single trading pair.</p>
 <ul>
-<li>Connected via IBC to two asset chains, posts atomic settlement instructions to both.</li>
-<li>Validators stake the more liquid of the pair, potentially inflating it, depending on configuration.</li>
-<li>Each pair zone requires at least one IBC relayer for each asset, and one between the assets.  In reality, this will probably all be a single entity.</li>
+<li>Connected via IBC to two asset chains, posts atomic settlement instructions to both on withdrawal.</li>
 <li>Pair zones maintain large caches of both assets on their respective zones.  Settlement happens on the pair zones and IBC is used for withdrawals only.</li>
 <li>Pair zones act as settlement chains if a traditional order book is desired.</li>
 </ul>
 </li>
 </ul>
 <p>This separation of concerns allow aggregate throughput well exceeding what any single blockchain can do while at the same time aligning the incentives of validators with those of assets in question.  It also allows the issuer of each asset type to implement their own compliance layer for its own zone.  Lastly, it allows for market based discovery of desirable trading pairs.</p>
+<h2 id="security">Security and Validator Economics</h2>
+<ul>
+  <li>Low volume zones can use ICS to secure their zone without requiring a validator set.</li>
+  <li>High volume zones can use their own validator set, with enhanced security through cross-staking.</li>
+</ul>
 <h2 id="open-questions">Open Questions</h2>
 <ul>
-<li>Should the asset under management really be the native chain asset or should there be a special settlement token for all zones?<ul>
-<li>If the latter, to what extent should asset issuers dilute their asset for staking?</li>
-</ul>
-</li>
 <li>Is the latency of such an architecture acceptable?  My gut instinct is it&#39;s fine for everything by high speed trading.</li>
 <li>What kind of structure is best suited for pair zones and relayers?  Single entity or relayer specialists?</li>
-<li>What do the economics look like for validator recruitment and relaying for low volume pairs?  At what volume do fees alone sustain validators?</li>
 </ul>
 <h1 id="next-steps">Next Steps</h1>
 <p>Technical validation:  I need some folks who know Cosmos better than I do to look at this and tell me if it&#39;s feasible.  If it is, well, let&#39;s build it! </p>
