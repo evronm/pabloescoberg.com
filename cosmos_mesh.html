@@ -12,9 +12,7 @@
 <ul>
 <li><p>Asset zones:  Simple, authoritative ledgers of who owns how much of a single asset.</p>
 <ul>
-<li>Accepts settlement instructions and executes atomically</li>
-<li>The asset tracked is the native asset of the chain, so validators stake that.<ul>
-<li>Depending on configuration, this could lead to inflation of the underlying asset.</li>
+<li>Accept settlement instructions and executes atomically</li>
 </ul>
 </li>
 </ul>
@@ -24,7 +22,8 @@
 <li>Connected via IBC to two asset chains, posts atomic settlement instructions to both.</li>
 <li>Validators stake the more liquid of the pair, potentially inflating it, depending on configuration.</li>
 <li>Each pair zone requires at least one IBC relayer for each asset, and one between the assets.  In reality, this will probably all be a single entity.</li>
-<li>Pair zones are probably optional if an order book is desired.  In that case, a relayer can also run a traditional order book.</li>
+<li>Pair zones maintain large caches of both assets on their respective zones.  Settlement happens on the pair zones and IBC is used for withdrawals only.</li>
+<li>Pair zones act as settlement chains if a traditional order book is desired.</li>
 </ul>
 </li>
 </ul>
