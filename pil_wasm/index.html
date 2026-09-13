@@ -1,374 +1,235 @@
 <!DOCTYPE html>
+<!-- minlib on wasm64: lib/gui.l's framebuffer GUI on a canvas.
+     Follows sdl2gui.c's event contract; see src/browser/host_browser.c. -->
 <html lang="en">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>PicoLisp REPL (wasm64)</title>
+<title>PicoLisp minlib &mdash; framebuffer GUI on wasm64</title>
 <style>
-  * { box-sizing: border-box; margin: 0; padding: 0; }
-  body {
-    font-family: "SF Mono", "Menlo", "Consolas", monospace;
-    background: #fff; color: #000;
-    display: flex; flex-direction: column; height: 100vh;
-  }
-  #header {
-    padding: 12px 16px; background: #f0f0f0;
-    border-bottom: 1px solid #ccc;
-    font-size: 14px; color: #333;
-    display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap;
-  }
-  #header .ver { color: #666; font-size: 12px; }
-  #banner {
-    padding: 10px 16px; font-size: 13px; line-height: 1.5;
-    background: #fff4d6; border-bottom: 1px solid #e3cc8a; color: #4a3a00;
-  }
-  #banner.error { background: #fdecea; border-bottom-color: #e0b4ae; color: #5a1a12; }
-  #banner code { background: rgba(0,0,0,.06); padding: 0 3px; }
-  #output {
-    flex: 1; overflow-y: auto; padding: 12px 16px;
-    white-space: pre-wrap; word-wrap: break-word;
-    font-size: 14px; line-height: 1.5; color: #000;
-  }
-  #output .echo { color: #666; }
-  #input-area {
-    display: flex; align-items: center;
-    padding: 8px 16px; background: #f0f0f0; border-top: 1px solid #ccc;
-  }
-  #prompt { color: #333; margin-right: 8px; font-size: 14px; }
-  #input {
-    flex: 1; background: transparent; border: none; outline: none;
-    color: #000; font-family: inherit; font-size: 14px;
-  }
-  #input:disabled { color: #999; }
-  #notes {
-    border-top: 1px solid #ccc; background: #fafafa;
-    padding: 8px 16px 12px; font-size: 13px; line-height: 1.55;
-    max-height: 45vh; overflow-y: auto;
-  }
-  #notes details { margin-top: 4px; }
-  #notes summary { cursor: pointer; color: #333; padding: 3px 0; }
-  #notes .body { padding: 4px 0 8px 14px; color: #333; }
-  #notes p { margin: 6px 0; }
-  #notes ul { margin: 6px 0 6px 18px; }
-  #notes li { margin: 3px 0; }
-  #notes pre {
-    background: #f0f0f0; border: 1px solid #e0e0e0; border-radius: 3px;
-    padding: 8px 10px; margin: 8px 0; overflow-x: auto;
-    font-size: 12px; line-height: 1.5; white-space: pre;
-  }
-  #notes code { background: rgba(0,0,0,.06); padding: 0 3px; }
-  #notes a { color: #06c; }
+  body { font: 13px/1.5 system-ui, sans-serif; margin: 0; padding: 1.5rem;
+         background: #14161a; color: #c9ccd1; }
+  h1 { font-size: 1rem; font-weight: 600; margin: 0 0 .25rem; color: #e6e8eb; }
+  p.sub { margin: 0 0 1rem; color: #8b9099; }
+  #wrap { display: flex; gap: 1.5rem; align-items: flex-start; flex-wrap: wrap; }
+  canvas { background: #000; border: 1px solid #2c3038; border-radius: 4px;
+           display: block; cursor: default; touch-action: none; }
+  canvas:focus { outline: 2px solid #4c7fd4; outline-offset: 2px; }
+  #side { width: 26rem; max-width: 100%; }
+  #log { height: 15rem; overflow: auto; margin: 0; padding: .6rem .7rem;
+         background: #0e1013; border: 1px solid #2c3038; border-radius: 4px;
+         font: 12px/1.45 ui-monospace, monospace; white-space: pre-wrap;
+         color: #a9b0ba; }
+  form { display: flex; gap: .4rem; margin: .6rem 0; }
+  input[type=text] { flex: 1; min-width: 0; padding: .4rem .5rem; color: #e6e8eb;
+         background: #0e1013; border: 1px solid #2c3038; border-radius: 4px;
+         font: 12px ui-monospace, monospace; }
+  button { padding: .4rem .7rem; background: #232830; color: #e6e8eb;
+         border: 1px solid #363c46; border-radius: 4px; cursor: pointer;
+         font: inherit; }
+  button:hover { background: #2c323c; }
+  .demos { display: flex; gap: .4rem; flex-wrap: wrap; }
+  code { color: #cbd3de; }
 </style>
 </head>
 <body>
+<h1>PicoLisp minlib &mdash; framebuffer GUI on wasm64</h1>
+<p class="sub">The GUI in <code>lib/gui.l</code>, drawn by PicoLisp into a pixel
+buffer and blitted straight to this canvas. No DOM bindings.</p>
 
-<div id="header">
-  <strong>PicoLisp</strong>
-  <span class="ver">26.5.4 &middot; wasm64 &middot; <span id="status">loading&hellip;</span></span>
+<div id="wrap">
+  <canvas id="fb" width="800" height="600" tabindex="0"
+          aria-label="PicoLisp framebuffer"></canvas>
+  <div id="side">
+    <div class="demos">
+      <button data-demo='(fonts "FreeSansB") (form 2 3 6 5 (1 1 (okButton)))'>OK button</button>
+      <button data-demo='(load "test1.l")'>test1.l</button>
+      <button data-demo='(load "test2.l")'>test2.l</button>
+    </div>
+    <form id="repl">
+      <input type="text" id="expr" placeholder="(+ 1 2)" spellcheck="false"
+             autocomplete="off" aria-label="Lisp expression">
+      <button type="submit">Eval</button>
+    </form>
+    <pre id="log" aria-live="polite" aria-label="Console"></pre>
+  </div>
 </div>
 
-<div id="banner" hidden></div>
-
-<div id="output"></div>
-
-<div id="input-area">
-  <span id="prompt">:</span>
-  <input id="input" type="text" autocomplete="off" spellcheck="false"
-         autocapitalize="off" disabled>
-</div>
-
-<div id="notes">
-  <details>
-    <summary>About this build &mdash; what works, what doesn't</summary>
-    <div class="body">
-      <p>This is Alexander Burger's <a href="https://software-lab.de/doc/ref.html">PicoLisp</a>
-      (pil21) compiled to WebAssembly and running entirely in your browser. No
-      server evaluates anything; reloading the page gives you a fresh, empty
-      interpreter.</p>
-      <p>It is the <strong>bare interpreter</strong>. There is no filesystem and
-      <code>lib.l</code> is not loaded, so the following are <em>not</em>
-      available:</p>
-      <ul>
-        <li><code>load</code>, and <code>in</code>/<code>out</code> on files</li>
-        <li>everything from <code>lib.l</code> and the <code>@lib/*</code>
-            modules (<code>pilog</code>, <code>http</code>, <code>xhtml</code>&hellip;)</li>
-        <li>the database layer, <code>native</code>/FFI, and subprocesses</li>
-      </ul>
-      <p>The core language is all there: arithmetic and bignums, lists, strings
-      and symbols, <code>de</code>, <code>let</code>, mapping functions,
-      <code>catch</code>/<code>throw</code>, error recovery and <code>gc</code>.</p>
-      <p>Note that <code>(bye)</code> ends the interpreter for the tab &mdash;
-      you will be told to reload.</p>
-    </div>
-  </details>
-
-  <details>
-    <summary>Steps to reproduce this build</summary>
-    <div class="body">
-      <p>Everything you need is in one 34KB archive:
-      <a href="pil21-wasm64.tar.gz"><strong>pil21-wasm64.tar.gz</strong></a>
-      &mdash; the files this port adds to a stock pil21 tree, plus a patch for
-      the single file it modifies. Unpack it over a pil21 source tree:</p>
-<pre>tar -xzf pil21-wasm64.tar.gz --strip-components=1
-patch -p1 &lt; src/dec.l.patch</pre>
-      <p><strong>1. Toolchain.</strong> Emscripten 6.0.9 via emsdk. The native
-      pil21 build is needed first, so you also need its usual dependencies
-      (clang/LLVM, readline, libffi, OpenSSL). Node 24 is only needed for the
-      Node build and the test harness.</p>
-<pre>git clone https://github.com/emscripten-core/emsdk.git ~/src/emsdk
-cd ~/src/emsdk &amp;&amp; ./emsdk install 6.0.9 &amp;&amp; ./emsdk activate 6.0.9
-source ~/src/emsdk/emsdk_env.sh</pre>
-      <p><strong>2. Build native pil21 first.</strong> This bootstraps
-      <code>src/base.ll</code>, the target-independent LLVM IR that the wasm
-      build consumes. (The release tarball ships a <code>base.ll</code>, so this
-      step can be skipped if you do not want the native binary.)</p>
-<pre>cd src &amp;&amp; make</pre>
-      <p><strong>3. Build for wasm.</strong> These targets are not in the stock
-      pil21 Makefile. They come from <code>src/Makefile.wasm</code>, which this
-      port adds; the stock <code>src/Makefile</code> is left untouched, so the
-      native build is unaffected.</p>
-<pre>make -f Makefile.wasm browser   # -&gt; ../bin/web/{index.html,picolisp.js,picolisp.wasm}
-make -f Makefile.wasm wasm      # optional: Node build -&gt; ../bin/picolisp.js</pre>
-      <p><strong>4. Serve it over HTTP.</strong> WebAssembly cannot be fetched
-      from a <code>file://</code> URL, so opening the HTML directly will not
-      work. Any static server will do; only those three files need to be
-      deployed, and they must stay in the same directory.</p>
-<pre>cd ../bin/web &amp;&amp; python3 -m http.server 8765</pre>
-      <p><strong>Verifying a build.</strong> The native binary is the oracle
-      &mdash; run the same script through both and diff. They should be
-      byte-identical:</p>
-<pre>./bin/picolisp                &lt; script.l &gt; /tmp/out.native 2&gt;&amp;1
-node src/browser/test-node.js &lt; script.l &gt; /tmp/out.browser
-diff /tmp/out.native /tmp/out.browser</pre>
-      <p><code>src/browser/test-node.js</code> drives this browser build
-      headlessly through the same three hooks the page uses, so the wasm side is
-      testable without a browser.</p>
-    </div>
-  </details>
-
-  <details>
-    <summary>What it took to get pil21 onto wasm64</summary>
-    <div class="body">
-      <p>pil21 stores type tags in the low bits of 64-bit pointers, so this has
-      to be <strong>wasm64</strong> (<code>-sMEMORY64=1</code>); wasm32 is not an
-      option, and neither is wasi-sdk, which does not support wasm64. The
-      substantive problems were:</p>
-      <ul>
-        <li><strong>Heap alignment.</strong> Cells must be 16-byte aligned
-        because tags live in <code>ptr &amp; 15</code>, but Emscripten's wasm64
-        <code>malloc</code> is only 8-byte aligned &mdash;
-        <code>malloc(36) % 16 == 8</code>. A heap segment landing on an
-        8-mod-16 address makes every cell read back as a symbol. pil21's
-        allocator is routed through a 16-byte aligned one. This one is nasty
-        because it depends only on prior allocation history, so it appears and
-        disappears with unrelated edits.</li>
-        <li><strong>call_indirect signatures.</strong> PicoLisp's dispatch passes
-        two arguments where builtins declare one. x86-64 ignores the extra
-        argument; wasm traps. A dummy parameter is added to the IR.</li>
-        <li><strong>Function-pointer tagging.</strong> PicoLisp tags function
-        pointers <code>+2</code> and untags with <code>&amp; ~3</code>, which
-        needs 4-byte-aligned addresses; wasm table indices are sequential
-        integers. An in-memory indirection table restores the invariant.</li>
-        <li><strong>Blocking stdin.</strong> A browser cannot block, so reading a
-        character suspends the whole interpreter through Asyncify and resumes it
-        when a keystroke arrives. Asyncify also covers pil21's
-        <code>setjmp</code>/<code>longjmp</code>.</li>
-        <li><strong>Console I/O.</strong> <code>Env.put</code>/<code>Env.get</code>
-        are intercepted directly, bypassing the Emscripten filesystem. A
-        replacement reader must also maintain <code>$Chr</code>, PicoLisp's
-        single-character look-ahead, or the reader rejects valid input.</li>
-        <li><strong>Stack size.</strong> Emscripten defaults to 64KB against
-        native's 8MB, and PicoLisp recurses over lists.</li>
-      </ul>
-      <p>Three genuine pil21 portability bugs turned up on the way, in the
-      declared types of <code>fread</code>, <code>fwrite</code> and
-      <code>poll</code> (<code>nfds_t</code> is 64-bit on x86-64 and 32-bit on
-      wasm64) &mdash; three lines in <code>src/dec.l</code>, the only change to
-      pil21's own Lisp sources.</p>
-      <p>Everything else is additive: <code>src/Makefile.wasm</code>,
-      <code>src/wasm_patch_ll.py</code> (which post-processes the LLVM IR),
-      <code>src/readline_stubs.c</code>, this page, and
-      <code>src/lib.emscripten.c</code> &mdash; a variant of
-      <code>src/lib.c</code> with the libffi/<code>dlopen</code> layer stubbed
-      out (hence no <code>native</code>) and the Emscripten-specific I/O and
-      allocator shims added.</p>
-    </div>
-  </details>
-</div>
-
+<script src="picolisp.js"></script>
 <script>
-// ─────────────────────────────────────────────────────────────────────────────
-// Console I/O bridge.
-//
-// The wasm side is __wrap__putStdout / __wrap__getStdin in lib.emscripten.c,
-// compiled with -DPIL_BROWSER and linked with
-// -Wl,--wrap=_putStdout,--wrap=_getStdin. Those call exactly the three hooks
-// below (pilPutByte / pilFlush / pilReadByte), passing and returning plain
-// integers only.
-//
-// We deliberately do NOT use FS.init's stdin/stdout callbacks: pil21's output
-// only reaches them after its own buffer flushes through write(1,...), which
-// does not arrive in a browser, and the stdin callback cannot block, so
-// returning "no data yet" reads as EOF and the REPL exits immediately.
-// ─────────────────────────────────────────────────────────────────────────────
+const W = 800, H = 600;
+const canvas = document.getElementById('fb');
+const ctx = canvas.getContext('2d');
+const logEl = document.getElementById('log');
 
-var outputEl = document.getElementById('output');
-var inputEl = document.getElementById('input');
-var statusEl = document.getElementById('status');
-var bannerEl = document.getElementById('banner');
-
-function showBanner(html, isError) {
-  bannerEl.innerHTML = html;
-  bannerEl.className = isError ? 'error' : '';
-  bannerEl.hidden = false;
+function log(s) {
+   logEl.textContent += s + '\n';
+   logEl.scrollTop = logEl.scrollHeight;
 }
 
-function appendText(text, cls) {
-  var atBottom =
-    outputEl.scrollHeight - outputEl.scrollTop - outputEl.clientHeight < 4;
-  if (cls) {
-    var span = document.createElement('span');
-    span.className = cls;
-    span.textContent = text;
-    outputEl.appendChild(span);
-  } else {
-    outputEl.appendChild(document.createTextNode(text));
-  }
-  if (atBottom) outputEl.scrollTop = outputEl.scrollHeight;
+// PicoLisp transient symbols use " as the delimiter, \ to escape, and ^ to
+// introduce a control character, so all three have to be escaped.
+function lispStr(s) {
+   return '"' + s.replace(/[\\"^]/g, c => '\\' + c) + '"';
 }
 
-// ── wasm64 support probe ────────────────────────────────────────────────────
-// A minimal module whose memory uses the 64-bit limits flag (0x04). Engines
-// without the memory64 proposal reject it. Checked before fetching the ~1.2MB
-// payload, so unsupported browsers get a message instead of a blank page.
-function hasMemory64() {
-  try {
-    return WebAssembly.validate(
-      new Uint8Array([0, 97, 115, 109, 1, 0, 0, 0, 5, 3, 1, 4, 1]));
-  } catch (e) {
-    return false;
-  }
-}
+createPil({
+   print: log,
+   printErr: log,
+}).then(Module => {
+   // Every call that can reach a fiber swap is void: the swap unwinds to the
+   // JS boundary and is rewound by Emscripten's trampoline, and a return value
+   // does not survive that. Results come back through the getters.
+   const pilStart  = Module.cwrap('pilStart', null, ['number', 'number']);
+   const pilEvalRaw = Module.cwrap('pilEval', null, ['string']);
+   const pilFrame  = Module.cwrap('pilFrame', null, []);
+   const pilReady  = Module.cwrap('pilReady', 'number', []);
+   const pilPixels = Module.cwrap('pilPixels', 'number', []);
+   const pilResult = Module.cwrap('pilResult', 'string', []);
 
-var pilInput = [];               // bytes waiting to be read by __wrap__getStdin
-var pilOutput = [];              // bytes written but not yet rendered
-var pilDecoder = new TextDecoder('utf-8');
-var lastRead = Date.now();       // liveness heartbeat, see the watchdog below
-var dead = false;
+   pilStart(W, H);
+   if (!pilReady()) {
+      log('Can\'t start PicoLisp');
+      return;
+   }
 
-var Module = {
-  noInitialRun: false,           // let main() run pil21's own REPL
-  noExitRuntime: true,
+   // Re-read the pointer and rebuild the view every frame: ALLOW_MEMORY_GROWTH
+   // can detach the old ArrayBuffer.
+   function blit() {
+      const base = Number(pilPixels());
+      const view = new Uint8ClampedArray(Module.HEAPU8.buffer, base, W * H * 4);
+      ctx.putImageData(new ImageData(view, W, H), 0, 0);
+   }
 
-  // Called once per byte of console output.
-  pilPutByte: function (b) {
-    pilOutput.push(b);
-    if (b === 10) Module.pilFlush();
-  },
+   // Repaint the background and let lib/gui.l draw over it. Used for events
+   // and for opening a form, where stale pixels have to go.
+   function draw() {
+      pilFrame();
+      blit();
+      return alive();
+   }
 
-  // Render whatever is buffered. Called on newline and, importantly, once
-  // before the REPL blocks for input, so a trailing partial line is visible.
-  pilFlush: function () {
-    if (!pilOutput.length) return;
-    var bytes = new Uint8Array(pilOutput);
-    pilOutput = [];
-    // stream:true so a multi-byte UTF-8 sequence split across flushes survives
-    appendText(pilDecoder.decode(bytes, {stream: true}));
-  },
+   // Redraw the GUI *without* repainting the background, so anything drawn
+   // straight into the framebuffer -- (rect), (dot), (render) from the
+   // expression box -- survives. (clear 0 0 800 600) wipes it again.
+   function redraw() {
+      pilEval('(fbDraw)');
+      blit();
+      return alive();
+   }
 
-  // Next input byte, or -1 if none available; the wasm side then sleeps and
-  // retries, so this never has to signal EOF.
-  pilReadByte: function () {
-    lastRead = Date.now();
-    return pilInput.length ? pilInput.shift() : -1;
-  },
+   // An uncaught Lisp error ends in bye(), which tears the interpreter down;
+   // exit() cannot terminate a wasm module, so it is left unusable. Everything
+   // this page evaluates is wrapped in a catch so that should not happen, but
+   // if it does, say so instead of crashing on the next call.
+   function alive() {
+      if (pilReady())
+         return true;
+      log('-- PicoLisp has exited; reload the page --');
+      return false;
+   }
 
-  printErr: function (text) { console.log(text); },
+   function pilEval(expr) {
+      pilEvalRaw(expr);
+      return pilResult();
+   }
 
-  onRuntimeInitialized: function () {
-    statusEl.textContent = 'ready';
-    inputEl.disabled = false;
-    inputEl.focus();
-  }
-};
+   // '(NIL) is the catch-all tag: (car Tag) being NIL makes err() hand back
+   // the message. Note ' reads as a dotted pair, so '(NIL) is not (quote (NIL)).
+   function guarded(expr) {
+      return "(catch '(NIL) " + expr + ")";
+   }
 
-function feedLine(text) {
-  var bytes = new TextEncoder().encode(text);
-  for (var i = 0; i < bytes.length; i++) pilInput.push(bytes[i]);
-  pilInput.push(10);             // newline terminates the expression
-}
+   // Evaluate, report, redraw. Used by the demo buttons and the input box.
+   function run(expr, echo, keepPixels) {
+      if (echo) log('> ' + expr);
+      const r = pilEval(guarded(expr));
+      log('-> ' + r);
+      if (keepPixels) redraw(); else draw();
+      return r;
+   }
 
-var cmdHistory = [], histIdx = -1;
+   draw();
+   canvas.focus();
 
-inputEl.addEventListener('keydown', function (e) {
-  if (e.key === 'Enter') {
-    var expr = this.value;
-    if (!expr.trim()) return;
-    cmdHistory.push(expr);
-    histIdx = cmdHistory.length;
-    // pil21 prints no prompt and does not echo when stdin is not a tty,
-    // so the page echoes the submitted line itself.
-    appendText(': ' + expr + '\n', 'echo');
-    feedLine(expr);
-    this.value = '';
-  } else if (e.key === 'ArrowUp') {
-    e.preventDefault();
-    if (histIdx > 0) { histIdx--; this.value = cmdHistory[histIdx]; }
-  } else if (e.key === 'ArrowDown') {
-    e.preventDefault();
-    if (histIdx < cmdHistory.length - 1) { histIdx++; this.value = cmdHistory[histIdx]; }
-    else { histIdx = cmdHistory.length; this.value = ''; }
-  }
+   // --- demos and the expression box ---
+
+   for (const b of document.querySelectorAll('[data-demo]'))
+      b.addEventListener('click', () => {
+         // (co 'gui ...) resumes an already-running coroutine rather than
+         // starting the new body, so stop the old form first.
+         pilEval(guarded("(co 'gui)"));
+         run("(co 'gui " + b.dataset.demo + ")", true);
+         canvas.focus();
+      });
+
+   document.getElementById('repl').addEventListener('submit', e => {
+      e.preventDefault();
+      const input = document.getElementById('expr');
+      if (input.value.trim()) {
+         // keepPixels: direct drawing from here is meant to stay on screen.
+         run(input.value, true, true);
+         input.value = '';
+      }
+   });
+
+   // --- mouse, following sdl2gui.c's state machine ---
+
+   let down = false, moved = false, X = 0, Y = 0;
+
+   function at(e) {
+      const r = canvas.getBoundingClientRect();
+      return [Math.round((e.clientX - r.left) * W / r.width),
+              Math.round((e.clientY - r.top) * H / r.height)];
+   }
+
+   canvas.addEventListener('pointerdown', e => {
+      canvas.focus();
+      // Capture keeps the drag alive if the pointer leaves the canvas, but it
+      // throws for a pointerId that is not currently active -- which is the
+      // case for synthetic events -- so it must not be load-bearing.
+      try { canvas.setPointerCapture(e.pointerId); } catch (_) {}
+      [X, Y] = at(e);
+      down = true, moved = false;
+      pilEval(guarded('(fbDn ' + X + ' ' + Y + ')'));
+      draw();
+   });
+
+   canvas.addEventListener('pointermove', e => {
+      if (!down) return;
+      const [x, y] = at(e);
+      if (moved || x < X - 1 || x > X + 1 || y < Y - 1 || y > Y + 1) {
+         moved = true;
+         pilEval(guarded('(fbMove ' + x + ' ' + y + ')'));
+         draw();
+      }
+   });
+
+   canvas.addEventListener('pointerup', e => {
+      if (!down) return;
+      if (!moved)
+         pilEval(guarded('(fbClick ' + X + ' ' + Y + ')'));
+      pilEval(guarded('(fbUp ' + X + ' ' + Y + ')'));   // the down position, as sdl2gui.c does
+      down = moved = false;
+      draw();
+   });
+
+   // --- keyboard, mapping to the escape sequences lib/gui.l expects ---
+
+   const KEYS = {
+      Backspace: '\b', Tab: '\t', Enter: '\r', Escape: '\x1b',
+      ArrowLeft: '\x1b[D', ArrowRight: '\x1b[C',
+   };
+
+   canvas.addEventListener('keydown', e => {
+      if (e.ctrlKey || e.metaKey || e.altKey) return;
+      let s = KEYS[e.key];
+      if (!s && e.key.length === 1) s = e.key;
+      if (!s) return;
+      e.preventDefault();
+      pilEval(guarded('(fbKey ' + lispStr(s) + ')'));
+      draw();
+   });
 });
-
-document.body.addEventListener('mouseup', function () {
-  if (!dead && !window.getSelection().toString()) inputEl.focus();
-});
-
-// ── Liveness watchdog ───────────────────────────────────────────────────────
-// A live REPL polls pilReadByte every ~10ms forever, so a stale heartbeat means
-// main() has returned -- (bye), or a crash. Emscripten's onExit is no use here:
-// Asyncify keeps the runtime alive, so it never fires.
-//
-// A long computation also stops polling, but it runs synchronously inside wasm
-// and therefore blocks the event loop, so this interval cannot run at all while
-// it does. If we get to run and the heartbeat is stale, the interpreter really
-// is gone. (Verified against a 4-million-element list construction.)
-setInterval(function () {
-  if (dead || Date.now() - lastRead < 2000) return;
-  dead = true;
-  Module.pilFlush();
-  statusEl.textContent = 'stopped';
-  inputEl.disabled = true;
-  inputEl.blur();
-  showBanner(
-    'The interpreter has exited &mdash; <code>bye</code> ends it for this tab. ' +
-    '<a href="" onclick="location.reload();return false">Reload</a> to start a ' +
-    'fresh one.', false);
-}, 500);
-
-// ── Boot ────────────────────────────────────────────────────────────────────
-if (!hasMemory64()) {
-  dead = true;
-  statusEl.textContent = 'unsupported';
-  showBanner(
-    'This build needs <strong>WebAssembly memory64</strong>, which this browser ' +
-    'does not support. pil21 stores type tags in the low bits of 64-bit ' +
-    'pointers, so a 32-bit build is not possible. Please try a current ' +
-    'Firefox or Chrome.', true);
-} else {
-  var s = document.createElement('script');
-  s.src = 'picolisp.js';
-  s.onerror = function () {
-    dead = true;
-    statusEl.textContent = 'failed';
-    showBanner('Could not load <code>picolisp.js</code>. It must sit in the ' +
-               'same directory as this page, alongside ' +
-               '<code>picolisp.wasm</code>.', true);
-  };
-  document.body.appendChild(s);
-}
 </script>
-
 </body>
 </html>
